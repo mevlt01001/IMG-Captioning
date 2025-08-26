@@ -1,48 +1,34 @@
 import math
 import torch
-from torch.nn import Conv2d, MaxPool2d, BatchNorm2d
+import torch.nn as nn
 
-class CNNEncoder(torch.nn.Module):
+class CNNEncoder(nn.Module):
+
     def __init__(self, 
-                 backbone,
-                 seq_len:int=50, 
-                 device=torch.device('cpu')):
+                 backbone, 
+                 proj_dim:int,
+                 device=torch.device('cpu')
+                 ):
         
-        super(CNNEncoder, self).__init__()
-        self.out_ch = backbone.out_ch
-        self.grid_sizes = backbone.grid_sizes
-        self.seq_len = seq_len
-        self.convs = torch.nn.ModuleList(
-            Conv2d(ch, seq_len, 1) 
-            for ch in self.out_ch
-            ).to(device=device)
-        self.pools = torch.nn.ModuleList(
-            MaxPool2d(math.ceil(gs/16))
-            for gs in self.grid_sizes
-            ).to(device=device)
-        self.BNs = torch.nn.ModuleList(
-            BatchNorm2d(seq_len)
-            for i in range(len(self.out_ch))
-            ).to(device=device)        
-        
-        with torch.no_grad():
-            dummy = torch.zeros(1, 3, backbone.imgsz, backbone.imgsz, device=device)
-            out = backbone.forward(dummy)
-            out = self.forward(out)
-            self.feats = out.shape[-1]
-        
-        del dummy, out
+        super().__init__()
+        self.backbone = backbone
+        self.D = proj_dim
 
-    def forward(self, x:list[torch.Tensor]):
-        # x is backbone output [[B, C, H, W]... p3, p4, p5, ...]
-        B = x[0].shape[0]
-        out = []
-        for idx, feat in enumerate(x):
-            # feat.shape is [B, C, H, W]
-            _out = self.convs[idx](feat) # CONV: 
-            _out = self.BNs[idx](_out)
-            _out = self.pools[idx](_out)
-            _out = torch.reshape(_out, (B, self.seq_len, -1))
-            out.append(_out)
-        out = torch.cat(out, dim=-1)
-        return out
+        self.proj = nn.ModuleList([nn.Conv2d(c, proj_dim, kernel_size=1) for c in backbone.out_ch]).to(device=device)
+        self.pool = nn.ModuleList([nn.AdaptiveAvgPool2d(math.ceil(g/2)) for g in backbone.grid_sizes]).to(device=device)
+        self.ln   = nn.LayerNorm(proj_dim).to(device=device)
+
+        self.S = sum(math.ceil(g/2)**2 for g in backbone.grid_sizes)
+        self.feats = proj_dim  # D
+
+    def forward(self, feats: list[torch.Tensor]) -> torch.Tensor:
+        # feats: [p3, p4, p5] each one is [B, C, H, W]
+        seqs = []
+        for x, conv, pool in zip(feats, self.proj, self.pool):
+            z = conv(x)                    # [B, D, H, W]
+            z = pool(z)                    # [B, D, h, w]
+            z = z.flatten(2).transpose(1, 2)  # [B, D, S] -> [B, S, D]
+            z = self.ln(z)
+            seqs.append(z)
+        img_seq = torch.cat(seqs, dim=1)   # [B, S, D]
+        return img_seq

@@ -10,6 +10,7 @@ class Model(torch.nn.Module):
                  model:UltralyticsModel,
                  imgsz:int= 640,
                  seq_len:int=50,
+                 dim:int=512,
                  vocap_size:int=26000,
                  hidden_feats:int=512,
                  num_layers:int=3,
@@ -21,6 +22,7 @@ class Model(torch.nn.Module):
         self.model = model
         self.imgsz = imgsz
         self.seq_len = seq_len
+        self.dim = dim
         self.vocap_size = vocap_size
         self.hidden_feats = hidden_feats
         self.num_layers = num_layers
@@ -34,7 +36,7 @@ class Model(torch.nn.Module):
 
         self.encoder = CNNEncoder(
             backbone=self.backbone,
-            seq_len=self.seq_len,
+            proj_dim=self.dim,
             device=self.device
         )
 
@@ -52,6 +54,7 @@ class Model(torch.nn.Module):
     def forward(self, x):
         x = self.backbone(x)
         x = self.encoder(x)
+        print(x.shape)
         x = self.decoder(x)
         return x
 
