@@ -1,17 +1,16 @@
 from . import heads
 from . import UltralyticsModel
 from . import Concat
-import numpy as np
 import torch
 
 class Backbone(torch.nn.Module):
     """
     This class extracts 'ultralytics.engine.model.Model's features pyramid (FPN) (p3, p4, p5,...) output from given model as a backbone.
     """
-    def __init__(self, model: UltralyticsModel, imgsz:int=640):
+    def __init__(self, model: UltralyticsModel, imgsz:int=640, device=torch.device('cpu')):
         super(Backbone, self).__init__()
         self.model_name = model.model_name
-        self.device = model.device
+        self.device = device
         self.detect_feats_from = model.model.model[-1].f # list of feature map layer indices [..., p3, p4, p5, ...]
         self.layers = torch.nn.ModuleList(model.model.model[:-1]).to(self.device)
         self.imgsz = imgsz
@@ -20,6 +19,9 @@ class Backbone(torch.nn.Module):
             out = self.forward(dummy)
 
         self.out_ch = [p.shape[1] for p in out]
+        self.grid_sizes = [p.shape[-1] for p in out]
+        del out, dummy
+        print(self)
 
     def __str__(self):
         return f"""
@@ -27,6 +29,7 @@ class Backbone(torch.nn.Module):
         imgsz: {self.imgsz}
         feat_from: {self.detect_feats_from}
         feat_ch: {self.out_ch}
+        grid_sizes: {self.grid_sizes}
         """
     
     def forward(self, x):

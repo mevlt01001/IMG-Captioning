@@ -2,3 +2,5 @@
 *.ipynb
 *.pt
 *.onnx
+.vscode/
+__pycache__/
