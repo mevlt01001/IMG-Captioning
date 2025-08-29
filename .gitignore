@@ -4,3 +4,7 @@
 *.onnx
 .vscode/
 __pycache__/
+*.png
+*.jpg
+*.jpeg
+*.csv

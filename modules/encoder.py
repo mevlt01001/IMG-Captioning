@@ -12,7 +12,6 @@ class CNNEncoder(nn.Module):
         
         super().__init__()
         self.backbone = backbone
-        self.D = proj_dim
 
         self.proj = nn.ModuleList([nn.Conv2d(c, proj_dim, kernel_size=1) for c in backbone.out_ch]).to(device=device)
         self.pool = nn.ModuleList([nn.AdaptiveAvgPool2d(math.ceil(g/2)) for g in backbone.grid_sizes]).to(device=device)

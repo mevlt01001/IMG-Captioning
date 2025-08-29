@@ -1,63 +1,103 @@
+import math
 import torch
 from . import UltralyticsModel
 from .backbone import Backbone
 from .encoder import CNNEncoder
 from .decoder import LSTMDecoder
-from ultralytics import YOLO
+from .tokenizer import Tokenizer
 
 class Model(torch.nn.Module):
-    def __init__(self, 
-                 model:UltralyticsModel,
-                 imgsz:int= 640,
-                 seq_len:int=50,
+    def __init__(self,
+                 tokenizer:Tokenizer,
+                 model:UltralyticsModel|None=None,
+                 imgsz:int=640,
                  dim:int=512,
-                 vocap_size:int=26000,
                  hidden_feats:int=512,
                  num_layers:int=3,
-                 device:torch.device=torch.device('cpu')
+                 device:torch.device=torch.device('cpu'),
                  ):
-        
-        super(Model, self).__init__()
+        super().__init__()
 
-        self.model = model
-        self.imgsz = imgsz
-        self.seq_len = seq_len
-        self.dim = dim
-        self.vocap_size = vocap_size
-        self.hidden_feats = hidden_feats
-        self.num_layers = num_layers
+        self.tokenizer = tokenizer
         self.device = device
 
-        self.backbone = Backbone(
-            model=self.model,
-            imgsz=self.imgsz,
-            device=self.device
-        )
+        self.imgsz = max(64, 32 * (imgsz // 32))
+        self.dim = dim
+        self.hidden_feats = hidden_feats
+        self.num_layers = num_layers
 
-        self.encoder = CNNEncoder(
-            backbone=self.backbone,
-            proj_dim=self.dim,
-            device=self.device
-        )
+        self.vocap_size = tokenizer.vocap_size
+        self.pad_id = tokenizer.char2idx[tokenizer.PAD]
+        self.bos_id = tokenizer.char2idx[tokenizer.BOS]
+        self.eos_id = tokenizer.char2idx[tokenizer.EOS]
 
-        self.feats = self.encoder.feats
+        self.backbone = Backbone(model=model, imgsz=self.imgsz, device=self.device)  # p3/p4/p5 çıkarımı
+        self.encoder  = CNNEncoder(backbone=self.backbone, proj_dim=self.dim, device=self.device)
+        self.feats    = self.encoder.feats
 
         self.decoder = LSTMDecoder(
-            vocap_size=self.vocap_size,
-            seq_len=self.seq_len,
-            input_feats=self.feats,
-            hidden_feats=self.hidden_feats,
-            num_layers=self.num_layers,
+            vocab_size=self.vocap_size,
+            token_feats=self.feats,
+            hidden_size=self.hidden_feats,
+            num_layer=self.num_layers,
+            D_img=self.dim,
+            pad_id=self.pad_id,
+            bos_id=self.bos_id, 
+            eos_id=self.eos_id,
             device=self.device
         )
 
-    def forward(self, x):
+    def forward(self, x, tokens_in=None):
         x = self.backbone(x)
         x = self.encoder(x)
-        print(x.shape)
-        x = self.decoder(x)
+        x = self.decoder.forward(x, tokens_in) if self.training else self.decoder.generate(x, max_len=self.tokenizer.seq_len)
         return x
+    
+    @classmethod
+    def load_from_checkpoint(cls, 
+                             path:str, 
+                             tokenizer:Tokenizer, 
+                             device=torch.device('cpu')):
+        from ultralytics import YOLO
+        
+        ckpt = torch.load(path)
+        sd = ckpt.get("model_state_dict", None)
+        imgsz = ckpt.get("imgsz",640)
+        dim = ckpt.get("decoder_embed_dim", 512)
+        hidden_feats = ckpt.get("LSTM_hidden_feats", 512)
+        num_layers = ckpt.get("LSTM_num_layers", 3)
+        model_name = ckpt.get("model_name", "yolov11m.pt")
+        yolo_model = YOLO(model_name)
 
+        model = cls(
+            tokenizer=tokenizer,
+            model=yolo_model,
+            imgsz=imgsz,
+            dim=dim,
+            hidden_feats=hidden_feats,
+            num_layers=num_layers,
+            device=device
+        )
 
+        model.load_state_dict(sd)
 
+        return model
+        
+    def train(self, mode:bool=True, **kwargs):
+        has_fit_args = ("imagepaths" in kwargs)
+        if not has_fit_args:
+            return super().train(mode)
 
+        from .trainer import Trainer
+        super().train(True)
+        trainer = Trainer(model=self, device=self.device)
+        return trainer.fit(**kwargs, tokenizer=self.tokenizer)
+
+    def export(self, path:str="model.onnx"):
+        import onnx, onnxsim
+        dummy = torch.zeros(1, 3, self.imgsz, self.imgsz, device=self.device)
+        torch.onnx.export(self, dummy, path, opset_version=19)
+        model = onnx.load(path)
+        model, check = onnxsim.simplify(model)
+        model = onnx.shape_inference.infer_shapes(model)
+        onnx.save(model, path)
