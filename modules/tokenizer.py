@@ -1,7 +1,7 @@
 class Tokenizer:
     def __init__(self, captions:list[str]):
         self.captions: list[str] = captions
-        self.min_freq = 0.0005
+        self.min_freq = 5
         self.BOS = "<BOS>"
         self.EOS = "<EOS>"
         self.PAD = "<PAD>"
@@ -44,7 +44,7 @@ class Tokenizer:
         self.captions = captions
         
         sepical_tokens = [self.PAD, self.UNK, self.BOS, self.EOS]
-        self.vocap = set([word for cap in self.captions for word in cap]+sepical_tokens)
+        self.vocap = list(set(sepical_tokens+[word for cap in self.captions for word in cap]))
         self.vocap_size = len(self.vocap)
         
         self.seq_len = max(len(cap) for cap in self.captions)*2
@@ -61,6 +61,20 @@ class Tokenizer:
                 sentence.append(self.char2idx[w])
             captions.append(sentence)
         self.tokenized_captions = captions
+
+    def set_vocab(self, vocap:list[str]):
+        self.vocap = vocap
+        self.char2idx = {t:i for i,t in enumerate(self.vocap)}
+        self.idx2char = {i:t for t,i in self.char2idx.items()}
+        
+        captions = []
+        for cap in self.captions:
+            sentence = []
+            for w in cap:
+                sentence.append(self.char2idx[w])
+            captions.append(sentence)
+        self.tokenized_captions = captions
+        return self
 
     def encode(self, text:str) -> list[int]:
         toks = self.normalize(text)

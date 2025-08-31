@@ -1,10 +1,11 @@
-import math
+import os
 import torch
 from . import UltralyticsModel
 from .backbone import Backbone
 from .encoder import CNNEncoder
 from .decoder import LSTMDecoder
 from .tokenizer import Tokenizer
+from .trainer import Trainer, save_pred
 
 class Model(torch.nn.Module):
     def __init__(self,
@@ -47,6 +48,17 @@ class Model(torch.nn.Module):
             device=self.device
         )
 
+    @torch.no_grad()
+    def predict(self, images:torch.Tensor):
+        self.eval()
+        assert images.ndim == 4, "x must be [B,C,H,W]"
+        pred = self.forward(images)
+        B = pred.size(0)
+        for i in range(B):
+            cap = self.tokenizer.decode(pred[i].tolist())
+            os.makedirs(f"Inference_outs/preds", exist_ok=True)
+            save_pred(images[i], cap, os.path.join(f"Inference_outs/preds", f"{i}.png"))
+
     def forward(self, x, tokens_in=None):
         x = self.backbone(x)
         x = self.encoder(x)
@@ -60,17 +72,18 @@ class Model(torch.nn.Module):
                              device=torch.device('cpu')):
         from ultralytics import YOLO
         
-        ckpt = torch.load(path)
+        ckpt = torch.load(path, map_location=device)
         sd = ckpt.get("model_state_dict", None)
         imgsz = ckpt.get("imgsz",640)
         dim = ckpt.get("decoder_embed_dim", 512)
         hidden_feats = ckpt.get("LSTM_hidden_feats", 512)
         num_layers = ckpt.get("LSTM_num_layers", 3)
-        model_name = ckpt.get("model_name", "yolov11m.pt")
+        vocab = ckpt.get("vocab", None)
+        model_name = ckpt.get("model_name", "yolo11n.pt")
         yolo_model = YOLO(model_name)
 
         model = cls(
-            tokenizer=tokenizer,
+            tokenizer=tokenizer.set_vocab(vocab), # load training vocabulary
             model=yolo_model,
             imgsz=imgsz,
             dim=dim,
@@ -79,7 +92,9 @@ class Model(torch.nn.Module):
             device=device
         )
 
-        model.load_state_dict(sd)
+        res = model.load_state_dict(sd, strict=False)
+        print(res.missing_keys)
+        print(res.unexpected_keys)
 
         return model
         
@@ -88,7 +103,6 @@ class Model(torch.nn.Module):
         if not has_fit_args:
             return super().train(mode)
 
-        from .trainer import Trainer
         super().train(True)
         trainer = Trainer(model=self, device=self.device)
         return trainer.fit(**kwargs, tokenizer=self.tokenizer)

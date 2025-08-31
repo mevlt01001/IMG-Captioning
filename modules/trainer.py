@@ -44,19 +44,14 @@ def save_pred(img: torch.Tensor, caption: str, save_path: str = "pred.png"):
 
     panel_pil = Image.new("RGB", (imgsz, imgsz), (0,0,0))
     draw = ImageDraw.Draw(panel_pil)
-    try:
-        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24)
-    except:
-        font = ImageFont.load_default(size=24)
-
-    wrapped = textwrap.fill(caption, width=24)
+    font = ImageFont.load_default(size=32)
+    wrapped = textwrap.fill(caption, width=32)
 
     x0, y0 = 24, 24
     bbox = draw.multiline_textbbox((x0, y0), wrapped, font=font, spacing=6)
     pad = 12
     
     draw.rectangle([bbox[0]-pad, bbox[1]-pad, bbox[2]+pad, bbox[3]+pad], fill=(0,0,0))
-    
     draw.multiline_text((x0, y0), wrapped, font=font, fill=(255,255,255),
                         spacing=6, stroke_width=2, stroke_fill=(0,0,0))
     
@@ -87,11 +82,15 @@ class Trainer:
                  imagepaths:list[str], 
                  tokenizer:Tokenizer
                  ) -> str:
-        images = load_images(imagepaths, self.model.imgsz, device=self.device)
-        pred = self.model.forward(images)
-        B = pred.size(0)
-        for i in range(B):
-            cap = tokenizer.decode(pred[i].tolist())
+        images = load_images(imagepaths, self.model.imgsz, device=self.device) # [B, C, H, W]
+        preds = []
+        for img in images:
+            p = self.model.forward(img.unsqueeze(0)) # [B, S]
+            preds.append(p.squeeze(0))
+        
+        for i,c in enumerate(preds):
+            print(c.tolist())
+            cap = tokenizer.decode(c.tolist())
             os.makedirs(f"{self.cfg.save_dir}/preds", exist_ok=True)
             save_pred(images[i], cap, os.path.join(f"{self.cfg.save_dir}/preds", f"{i}.png"))
 
@@ -141,8 +140,6 @@ class Trainer:
 
                 imgs = load_images(paths, imgsz=self.model.imgsz, device=self.device)
                 tins, touts = load_captions(captions, self.model.vocap_size, device=self.device) # 2x [B, T, V]
-                self.model.train(False)
-                self.model.train(True)
                 logits = self.model.forward(imgs, tins)
 
                 loss = criterion.forward(logits.reshape(-1, logits.size(-1)), touts.reshape(-1))
@@ -158,7 +155,7 @@ class Trainer:
                 global_loss += loss.item() * bsz
                 seen += bsz
                 global_step += 1
-                print(f"Epoch {ep:03d}%{100*(batch_start_idx/len(self.captions)):.2f} loss={global_loss/seen:6.3f} lr={sched.get_last_lr()[0]:.6f}", end="\r")
+                print(f"Epoch {ep:03d} [%{100*((batch_start_idx+batch_size)/len(self.captions)):<6.2f}] loss={global_loss/seen:<6.3f} lr={sched.get_last_lr()[0]:.6f}", end="\r")
 
             random_idx:list = np.random.randint(0, len(self.captions), cfg.batch_size).tolist()
             paths = []
@@ -176,6 +173,7 @@ class Trainer:
             ckpt = {
                 "model_name": self.model.backbone.model_name,
                 "model_state_dict": self.model.state_dict(),
+                "vocab": tokenizer.vocap,
                 "last_avg_loss": ep_loss,
                 "pad_id": self.model.pad_id, 
                 "bos_id": self.model.bos_id, 
