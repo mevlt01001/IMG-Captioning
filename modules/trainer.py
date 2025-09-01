@@ -1,5 +1,6 @@
 import os, math, json, time, random
 from dataclasses import dataclass
+import unicodedata
 
 import torch
 import torch.nn as nn
@@ -46,13 +47,21 @@ def load_captions(captions:list[list[int]], vocap_size:int, device=torch.device(
     tout = torch.tensor(tout).long().to(device=device)
     return tin, tout
 
+def remove_accents(text: str) -> str:    
+    normalized = unicodedata.normalize("NFKD", text)    
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+def turkish_ascii(text: str) -> str:
+    text = remove_accents(text)
+    return text.replace("ı","i").replace("İ","I")
+
 def save_pred(img: torch.Tensor, caption: str, save_path: str = "pred.png"):
     if img.ndim != 3 or img.shape[0] not in (1,3):
         raise ValueError(f"img shape must be [C,H,W] with C=1 or 3, got {tuple(img.shape)}")
 
     C, H, W = img.shape
     imgsz = W
-
+    caption = turkish_ascii(caption)
     if C == 1:
         img = img.repeat(3, 1, 1)
     img_np = (img.clamp(0,1).permute(1,2,0) * 255.0).cpu().numpy().astype(np.uint8)
@@ -104,7 +113,6 @@ class Trainer:
             preds.append(p.squeeze(0))
         
         for i,c in enumerate(preds):
-            print(c.tolist())
             cap = tokenizer.decode(c.tolist())
             os.makedirs(f"{self.cfg.save_dir}/preds", exist_ok=True)
             save_pred(images[i], cap, os.path.join(f"{self.cfg.save_dir}/preds", f"{i}.png"))
