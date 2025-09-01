@@ -12,12 +12,27 @@ import numpy as np
 from .tokenizer import Tokenizer
 
 def _load_img(path, imgsz):
+    if not isinstance(path, str): # PIL
+        img = path.convert("RGB").resize((imgsz, imgsz))
+        data = torch.from_numpy(np.array(img)).permute(2,0,1).unsqueeze(0).float() / 255.0            
+        return data
+
     assert os.path.exists(path)
     img = np.array(Image.open(path).convert("RGB").resize((imgsz, imgsz)))    
     data = torch.from_numpy(img).permute(2,0,1).unsqueeze(0).float() / 255.0
     return data # [B, C, H, W]
 
 def load_images(paths, imgsz, device=torch.device('cpu')):
+    if isinstance(paths, dict): # For huggingface datasets my example "ituperceptron/image-captioning-turkish"
+        try:
+            return torch.cat([_load_img(p, imgsz) for p in paths["image"]], dim=0).to(device=device)
+        except Exception as e:
+            print(e)
+            print("If you are using Huggingface dataset or something else, please implement your own Trainer.load_images and Trainer._load_img function.")
+            exit(1)
+    elif isinstance(paths[0], dict):
+        return torch.cat([_load_img(p["image"], imgsz) for p in paths], dim=0).to(device=device)
+
     return torch.cat([_load_img(p, imgsz) for p in paths], dim=0).to(device=device)
 
 def load_captions(captions:list[list[int]], vocap_size:int, device=torch.device('cpu')):
@@ -155,7 +170,7 @@ class Trainer:
                 global_loss += loss.item() * bsz
                 seen += bsz
                 global_step += 1
-                print(f"Epoch {ep:03d} [%{100*((batch_start_idx+batch_size)/len(self.captions)):<6.2f}] loss={global_loss/seen:<6.3f} lr={sched.get_last_lr()[0]:.6f}", end="\r")
+                print(f"[%{100*((batch_start_idx+batch_size)/len(self.captions)):>6.2f}]Epoch {ep:03d} loss={global_loss/seen:<6.3f} lr={sched.get_last_lr()[0]:<.6f}", end="\r")
 
             random_idx:list = np.random.randint(0, len(self.captions), cfg.batch_size).tolist()
             paths = []

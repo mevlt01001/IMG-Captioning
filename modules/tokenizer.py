@@ -47,7 +47,7 @@ class Tokenizer:
         self.vocap = list(set(sepical_tokens+[word for cap in self.captions for word in cap]))
         self.vocap_size = len(self.vocap)
         
-        self.seq_len = max(len(cap) for cap in self.captions)*2
+        self.seq_len = max(len(cap) for cap in self.captions)
         print(f"seq_len: {self.seq_len}")
         self.captions = [cap + [self.PAD] * (self.seq_len - len(cap)) for cap in self.captions]
         
