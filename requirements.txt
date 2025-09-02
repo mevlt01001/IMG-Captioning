@@ -1,0 +1,9 @@
+torch==2.6.0
+torchvision==0.21.0
+ultralytics==8.3.169
+onnx==1.18.0
+onnxsim==0.4.36
+datasets==3.3.2
+numpy==2.2.6
+pandas==2.2.3
+Pillow==11.1.0

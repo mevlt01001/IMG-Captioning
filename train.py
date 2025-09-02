@@ -28,11 +28,11 @@ tokenizer = Tokenizer(captions)
 
 model = Model(
     tokenizer=tokenizer,
-    model=YOLO("yolo11n.pt"),
-    imgsz=512,
+    model=YOLO("yolo11s.pt"),
+    imgsz=640,
     dim=512,
-    hidden_feats=256,
-    num_layers=3,
+    hidden_feats=512,
+    num_layers=5,
     device=device
 )
 
@@ -40,7 +40,7 @@ model.train(
     imagepaths=img_paths,
     epoch=125, 
     batch_size=24, 
-    lr=1e-4, 
+    lr=85e-3, 
     weight_decay=1e-2,
     grad_clip=1.0,
     save_dir="train_outs",
