@@ -8,8 +8,6 @@ from modules.model import Model
 from modules.tokenizer import Tokenizer
 from datasets import load_dataset
 
-
-
 # CAPTIONS_PATH = "/home/neuron/datasets/obss-intern-competition-2025/train.csv"
 # IMAGES_PATH   = "/home/neuron/datasets/obss-intern-competition-2025/train_images/"
 
@@ -28,19 +26,18 @@ tokenizer = Tokenizer(captions)
 
 model = Model(
     tokenizer=tokenizer,
-    model=YOLO("yolo11s.pt"),
-    imgsz=640,
+    model=YOLO("yolo11n.pt"),
+    imgsz=512,
     dim=512,
     hidden_feats=512,
-    num_layers=5,
     device=device
 )
 
 model.train(
     imagepaths=img_paths,
     epoch=125, 
-    batch_size=24, 
-    lr=85e-3, 
+    batch_size=48,
+    lr=85e-4,
     weight_decay=1e-2,
     grad_clip=1.0,
     save_dir="train_outs",
@@ -48,9 +45,9 @@ model.train(
 
 
 # To Predict
-img = np.array(Image.open("images.jpeg").convert("RGB").resize((model.imgsz, model.imgsz)))
-img = torch.from_numpy(img).permute(2,0,1).unsqueeze(0).float() / 255.0
-model.predict(img.to(device))
+# img = np.array(Image.open("images.jpeg").convert("RGB").resize((model.imgsz, model.imgsz)))
+# img = torch.from_numpy(img).permute(2,0,1).unsqueeze(0).float() / 255.0
+# model.predict(img.to(device))
 
 # To Export onnx format
 # model.export(),exit()

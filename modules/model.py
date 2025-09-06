@@ -32,15 +32,20 @@ class Model(torch.nn.Module):
         self.bos_id = tokenizer.char2idx[tokenizer.BOS]
         self.eos_id = tokenizer.char2idx[tokenizer.EOS]
 
-        self.backbone = Backbone(model=model, imgsz=self.imgsz, device=self.device)  # p3/p4/p5 çıkarımı
-        self.encoder  = CNNEncoder(backbone=self.backbone, proj_dim=self.dim, device=self.device)
+        self.backbone = Backbone(model=model, 
+                                 imgsz=self.imgsz, 
+                                 device=self.device)  # p3/p4/p5 inf
+        
+        self.encoder  = CNNEncoder(out_ch=self.backbone.out_ch, 
+                                   grid_sizes=self.backbone.grid_sizes, 
+                                   proj_dim=self.dim, 
+                                   device=self.device)
         self.feats    = self.encoder.feats
 
         self.decoder = LSTMDecoder(
             vocab_size=self.vocap_size,
             token_feats=self.feats,
             hidden_size=self.hidden_feats,
-            num_layer=self.num_layers,
             D_img=self.dim,
             pad_id=self.pad_id,
             bos_id=self.bos_id, 
@@ -109,8 +114,9 @@ class Model(torch.nn.Module):
 
     def export(self, path:str="model.onnx"):
         import onnx, onnxsim
-        dummy = torch.zeros(1, 3, self.imgsz, self.imgsz, device=self.device)
-        torch.onnx.export(self, dummy, path, opset_version=19)
+        dummy = torch.rand(1, 3, self.imgsz, self.imgsz, device=self.device)
+        self.train(False)
+        torch.onnx.export(self, (dummy), path, dynamo=True)
         model = onnx.load(path)
         model, check = onnxsim.simplify(model)
         model = onnx.shape_inference.infer_shapes(model)
