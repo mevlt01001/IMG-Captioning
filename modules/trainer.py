@@ -68,8 +68,8 @@ def save_pred(img: torch.Tensor, caption: str, save_path: str = "pred.png"):
 
     panel_pil = Image.new("RGB", (imgsz, imgsz), (0,0,0))
     draw = ImageDraw.Draw(panel_pil)
-    font = ImageFont.load_default(size=32)
-    wrapped = textwrap.fill(caption, width=32)
+    font = ImageFont.load_default(size=16)
+    wrapped = textwrap.fill(caption, width=16)
 
     x0, y0 = 24, 24
     bbox = draw.multiline_textbbox((x0, y0), wrapped, font=font, spacing=6)
