@@ -142,7 +142,11 @@ class Trainer:
 
         global_step = 0
         total_step = cfg.epoch*math.ceil(len(self.captions)/cfg.batch_size)
-        opt = torch.optim.AdamW(self.model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
+        opt = torch.optim.AdamW([
+            {'params': self.model.backbone.parameters(), 'lr': 1e-5},
+            {'params': self.model.encoder.parameters()},
+            {'params': self.model.decoder.parameters()},
+        ], lr=cfg.lr, weight_decay=cfg.weight_decay)
         sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_step)
         criterion = nn.CrossEntropyLoss(ignore_index=int(self.model.pad_id))
 
