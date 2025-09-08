@@ -149,6 +149,7 @@ class Trainer:
         best_loss = float("inf")
         self.model.to(self.device)
         self.model.train(True)
+        scaler = GradScaler(enabled=True)
 
         for ep in range(1, cfg.epoch+1):
             global_loss = 0.0
@@ -163,15 +164,20 @@ class Trainer:
 
                 imgs = load_images(paths, imgsz=self.model.imgsz, device=self.device)
                 tins, touts = load_captions(captions, self.model.vocap_size, device=self.device) # 2x [B, T, V]
-                logits = self.model.forward(imgs, tins)
-
-                loss = criterion.forward(logits.reshape(-1, logits.size(-1)), touts.reshape(-1))
+                pad_id = self.model.pad_id
+                valid_lens = (touts != pad_id).sum(dim=1)              # [B]
+                batch_max_len = int(valid_lens.max().item())
+                tins  = tins[:,  :batch_max_len]
+                touts = touts[:, :batch_max_len]
+                with autocast(device_type="cuda", dtype=torch.float16):
+                    logits = self.model.forward(imgs, tins)
+                    loss = criterion.forward(logits.reshape(-1, logits.size(-1)), touts.reshape(-1))
 
                 opt.zero_grad()
-                loss.backward()
-
+                scaler.scale(loss).backward()
                 nn.utils.clip_grad_norm_(self.model.parameters(), cfg.grad_clip)
-                opt.step()
+                scaler.step(opt)
+                scaler.update()
                 sched.step()
 
                 bsz = imgs.size(0)
