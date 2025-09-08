@@ -22,7 +22,11 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = Tokenizer(captions)
 
 # To Load From Checkpoint
-model = Model.load_from_checkpoint(path="train_outs/last.pt", tokenizer=tokenizer, device=device)
+model = Model.load_from_checkpoint(
+    path="train_outs/last.pt", 
+    tokenizer=tokenizer,
+    freeze_backbone=True,
+    device=device)
 
 #model = Model(
 #    tokenizer=tokenizer,
@@ -36,7 +40,7 @@ model = Model.load_from_checkpoint(path="train_outs/last.pt", tokenizer=tokenize
 model.train(
     imagepaths=img_paths,
     epoch=125, 
-    batch_size=64,
+    batch_size=4,
     lr=1e-4,
     weight_decay=1e-2,
     grad_clip=1.0,

@@ -15,6 +15,7 @@ class Model(torch.nn.Module):
                  dim:int=512,
                  hidden_feats:int=512,
                  num_layers:int=3,
+                 freeze_backbone:bool=True,
                  device:torch.device=torch.device('cpu'),
                  ):
         super().__init__()
@@ -52,6 +53,9 @@ class Model(torch.nn.Module):
             eos_id=self.eos_id,
             device=self.device
         )
+        if freeze_backbone:
+            for p in self.backbone.parameters():
+                p.requires_grad = False
 
     @torch.no_grad()
     def predict(self, images:torch.Tensor):
@@ -73,7 +77,8 @@ class Model(torch.nn.Module):
     @classmethod
     def load_from_checkpoint(cls, 
                              path:str, 
-                             tokenizer:Tokenizer, 
+                             tokenizer:Tokenizer,
+                             freeze_backbone:bool=False,
                              device=torch.device('cpu')):
         from ultralytics import YOLO
         
@@ -94,6 +99,7 @@ class Model(torch.nn.Module):
             dim=dim,
             hidden_feats=hidden_feats,
             num_layers=num_layers,
+            freeze_backbone=freeze_backbone,
             device=device
         )
 
