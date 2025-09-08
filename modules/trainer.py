@@ -188,7 +188,7 @@ class Trainer:
                 global_loss += loss.item() * bsz
                 seen += bsz
                 global_step += 1
-                print(f"[%{100*((batch_start_idx+batch_size)/len(self.captions)):>6.2f}]Epoch {ep:03d} loss={global_loss/seen:<6.3f} lr={sched.get_last_lr()[0]:<.6f}", end="\r")
+                print(f"[%{100*((batch_start_idx+batch_size)/len(self.captions)):>6.2f}]Epoch {ep:03d} loss={global_loss/seen:<6.3f} lr={sched.get_last_lr()[-1]:<.6f}", end="\r")
 
             random_idx:list = np.random.randint(0, len(self.captions), cfg.batch_size).tolist()
             paths = []
