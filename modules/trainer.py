@@ -99,7 +99,7 @@ class TrainConfig:
     seq_len:int = 128
 
     def __str__(self):
-        f"""
+        return f"""
         epoch: {self.epoch}
         batch_size: {self.batch_size}
         lr: {self.lr}
