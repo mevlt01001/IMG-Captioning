@@ -2,8 +2,8 @@ import os
 import torch
 from . import UltralyticsModel
 from .backbone import Backbone
-from .encoder import CNNEncoder
-from .decoder import LSTMDecoder
+from .encoder import ViTEncoder
+from .decoder import ViTDecoder
 from .tokenizer import Tokenizer
 from .trainer import Trainer, save_pred
 
@@ -13,46 +13,51 @@ class Model(torch.nn.Module):
                  model:UltralyticsModel|None=None,
                  imgsz:int=640,
                  dim:int=512,
-                 hidden_feats:int=512,
-                 num_layers:int=3,
+                 encoder_depth:int=3,
+                 decoder_depth:int=3,
+                 encoder_num_heads:int=8,
+                 decoder_num_heads:int=8,
+                 dropout:float=0.1,
                  freeze_backbone:bool=True,
                  device:torch.device=torch.device('cpu'),
                  ):
         super().__init__()
 
         self.tokenizer = tokenizer
-        self.device = device
-
+        self.vocap_size = tokenizer.vocap_size
         self.imgsz = max(64, 32 * (imgsz // 32))
         self.dim = dim
-        self.hidden_feats = hidden_feats
-        self.num_layers = num_layers
-
-        self.vocap_size = tokenizer.vocap_size
         self.pad_id = tokenizer.char2idx[tokenizer.PAD]
         self.bos_id = tokenizer.char2idx[tokenizer.BOS]
         self.eos_id = tokenizer.char2idx[tokenizer.EOS]
+        self.encoder_depth = encoder_depth
+        self.decoder_depth = decoder_depth
+        self.encoder_num_heads = encoder_num_heads
+        self.decoder_num_heads = decoder_num_heads
+        self.dropout = dropout
+        self.freeze_backbone = freeze_backbone
+        self.device = device
 
         self.backbone = Backbone(model=model, 
                                  imgsz=self.imgsz, 
                                  device=self.device)  # p3/p4/p5 inf
         
-        self.encoder  = CNNEncoder(out_ch=self.backbone.out_ch, 
-                                   grid_sizes=self.backbone.grid_sizes, 
-                                   proj_dim=self.dim, 
+        self.encoder  = ViTEncoder(dim=self.dim, 
+                                   in_shape=self.backbone.bb_out_shape,
+                                   num_heads=encoder_num_heads,
+                                   num_blocks=encoder_depth,
+                                   dropout=dropout,
                                    device=self.device)
-        self.feats    = self.encoder.feats
 
-        self.decoder = LSTMDecoder(
-            vocab_size=self.vocap_size,
-            token_feats=self.feats,
-            hidden_size=self.hidden_feats,
-            D_img=self.dim,
-            pad_id=self.pad_id,
-            bos_id=self.bos_id, 
-            eos_id=self.eos_id,
-            device=self.device
-        )
+        self.decoder = ViTDecoder(vocab_size=self.vocap_size,
+                                  pad_id=self.pad_id,
+                                  bos_id=self.bos_id,
+                                  eos_id=self.eos_id,
+                                  dim=self.dim,
+                                  depth=decoder_depth,
+                                  heads=decoder_num_heads,
+                                  dropout=dropout,
+                                  device=self.device)
         if freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
@@ -86,8 +91,12 @@ class Model(torch.nn.Module):
         sd = ckpt.get("model_state_dict", None)
         imgsz = ckpt.get("imgsz",640)
         dim = ckpt.get("decoder_embed_dim", 512)
-        hidden_feats = ckpt.get("LSTM_hidden_feats", 512)
-        num_layers = ckpt.get("LSTM_num_layers", 3)
+        encoder_depth = ckpt.get("encoder_depth", 3)
+        decoder_depth = ckpt.get("decoder_depth", 3)
+        encoder_num_heads = ckpt.get("encoder_num_heads", 8)
+        decoder_num_heads = ckpt.get("decoder_num_heads", 8)
+        dropout = ckpt.get("dropout", 0.1)
+        freeze_backbone = ckpt.get("freeze_backbone", False)
         vocab = ckpt.get("vocab", None)
         model_name = ckpt.get("model_name", "yolo11n.pt")
         yolo_model = YOLO(model_name)
@@ -97,8 +106,11 @@ class Model(torch.nn.Module):
             model=yolo_model,
             imgsz=imgsz,
             dim=dim,
-            hidden_feats=hidden_feats,
-            num_layers=num_layers,
+            encoder_depth=encoder_depth,
+            decoder_depth=decoder_depth,
+            encoder_num_heads=encoder_num_heads,
+            decoder_num_heads=decoder_num_heads,
+            dropout=dropout,
             freeze_backbone=freeze_backbone,
             device=device
         )

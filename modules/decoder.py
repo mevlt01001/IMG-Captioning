@@ -1,5 +1,151 @@
+import math
 import torch
 import torch.nn as nn
+
+@torch.no_grad()
+def sinusoidal_1d_pe(S: int, D: int, device=None) -> torch.Tensor:
+
+    assert D % 2 == 0, f"D % 2 == 0 must; D={D}"
+    device = device or torch.device('cpu')
+
+    d = D // 2
+    pos = torch.arange(S, device=device, dtype=torch.float32)               # [S]
+    k   = torch.arange(d, device=device, dtype=torch.float32)               # [d]
+    omega = torch.exp(-math.log(10000.0) * k / d)                           # [d]
+
+    # Broadcast: [S,1]*[d] -> [S,d]
+    pe_sin = torch.sin(pos[..., None] * omega)  # [S,d]
+    pe_cos = torch.cos(pos[..., None] * omega)  # [S,d]
+
+    pe = torch.cat([pe_sin, pe_cos], dim=-1).unsqueeze(0).contiguous()  # [1,S,D]
+    return pe
+
+def causal_mask(T:int, device):
+    """
+    ```
+    tensor([[False,  True,  True,  True],
+        [False, False,  True,  True],
+        [False, False, False,  True],
+        [False, False, False, False]])
+    ```
+    """
+    m = torch.triu(torch.ones(T, T, device=device, dtype=torch.bool), diagonal=1)
+    return m  # [T,T]
+
+
+class DecoderAttnBlock(nn.Module):
+    def __init__(self, 
+                 embed_dim:int, 
+                 heads:int=8, 
+                 dropout:float=0.1, 
+                 mlp_ratio:float=4.0):
+        
+        super().__init__()
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm2 = nn.LayerNorm(embed_dim)
+        self.norm3 = nn.LayerNorm(embed_dim)
+        self.self_attn = nn.MultiheadAttention(embed_dim, heads, batch_first=True, dropout=dropout)
+        self.cross_attn = nn.MultiheadAttention(embed_dim, heads, batch_first=True, dropout=dropout)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, int(embed_dim*mlp_ratio)), 
+            nn.GELU(), 
+            nn.Dropout(dropout),
+            nn.Linear(int(embed_dim*mlp_ratio), embed_dim), 
+            nn.Dropout(dropout)
+        )
+
+    def forward(self, 
+                x:torch.Tensor, 
+                enc_out, 
+                self_attn_mask=None, 
+                self_key_padding=None, 
+                enc_key_padding=None):
+        
+        # x: [B,T,D], enc_out: [B,S,D]
+        h = self.norm1(x)
+        x = x + self.self_attn.forward(h, h, h,
+                               attn_mask=self_attn_mask,            # [T,T] causal
+                               key_padding_mask=self_key_padding,   # [B,T]
+                               need_weights=False)[0]
+
+        h = self.norm2(x)
+        x = x + self.cross_attn(h, enc_out, enc_out,
+                                key_padding_mask=enc_key_padding,   # [B,S] (genelde None)
+                                need_weights=False)[0]
+        h = self.norm3(x)
+        x = x + self.mlp(h)
+        return x  # [B,T,D]
+    
+class ViTDecoder(nn.Module):
+    def __init__(self, 
+                 vocab_size:int, 
+                 pad_id:int,
+                 bos_id:int,
+                 eos_id:int,
+                 dim:int, 
+                 depth:int=4, 
+                 heads:int=8, 
+                 dropout:float=0.1,
+                 device=torch.device('cpu')):
+        
+        super().__init__()
+        self.pad_id = pad_id
+        self.bos_id = bos_id
+        self.eos_id = eos_id
+        self.embed  = nn.Embedding(vocab_size, dim, padding_idx=pad_id).to(device)
+        self.dropout = nn.Dropout(dropout).to(device)
+        self.blocks = nn.ModuleList([DecoderAttnBlock(dim, heads, dropout) for _ in range(depth)]).to(device)
+        self.norm = nn.LayerNorm(dim).to(device)
+        self.lm_head = nn.Linear(dim, vocab_size, bias=False).to(device)
+        self.lm_head.weight = self.embed.weight
+
+    def forward(self, 
+                enc_out:torch.Tensor, # [B,S,D]
+                tins:torch.Tensor):   # [B,T]
+
+        B, T = tins.shape
+        x = self.embed.forward(tins)                           # [B,T,D]
+        x = x + sinusoidal_1d_pe(T, x.size(-1), x.device)  # 1D PE
+        x = self.dropout.forward(x)
+
+        attn_mask = causal_mask(T, x.device)               # [T,T], True=mask
+        key_pad   = (tins == self.pad_id)                  # [B,T]
+        enc_key_pad = None                                 # genelde gerekmez (S patch’lerin hepsi geçerli)
+
+        for blk in self.blocks:
+            x = blk.forward(x, enc_out, self_attn_mask=attn_mask, self_key_padding=key_pad, enc_key_padding=enc_key_pad)
+
+        x = self.norm(x)
+        logits = self.lm_head(x)                        # [B,T,vocab]
+        return logits
+
+    @torch.no_grad()
+    def generate(self, 
+                 enc_out,
+                 max_len:int=256
+                 ):
+        B, S, D = enc_out.shape
+        x_ids = torch.full((B,1), self.bos_id, device=enc_out.device, dtype=torch.long)
+        finished = torch.zeros(B, dtype=torch.bool, device=enc_out.device)
+
+        for t in range(1, max_len+1):
+            x = self.embed(x_ids)                                  # [B,t,D]
+            x = x + sinusoidal_1d_pe(x.size(1), x.size(2), x.device)
+            for blk in self.blocks:
+                attn_mask = causal_mask(x.size(1), x.device)
+                key_pad   = (x_ids == self.pad_id)
+                x = blk(x, enc_out, self_attn_mask=attn_mask, self_key_padding=key_pad)
+
+            x = self.norm(x)
+            logits = self.lm_head(x[:, -1])                        # [B,vocab]
+            next_id = torch.argmax(logits, dim=-1)                 # greedy (istersen top-k/nucleus ekleriz)
+            x_ids = torch.cat([x_ids, next_id[:,None]], dim=1)
+
+            finished = finished | (next_id == self.eos_id)
+            if bool(finished.all()):
+                break
+
+        return x_ids  # [B, <=max_len+1]
 
 class AdditiveAttn(nn.Module):
     def __init__(self, fdim=512, hdim=512, dim=128):

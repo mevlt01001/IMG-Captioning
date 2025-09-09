@@ -153,7 +153,7 @@ class Trainer:
         best_loss = float("inf")
         self.model.to(self.device)
         self.model.train(True)
-        scaler = GradScaler(enabled=True)
+        scaler = GradScaler(device=self.device.type, enabled=True)
 
         for ep in range(1, cfg.epoch+1):
             global_loss = 0.0
@@ -207,14 +207,15 @@ class Trainer:
                 "model_name": self.model.backbone.model_name,
                 "model_state_dict": self.model.state_dict(),
                 "vocab": tokenizer.vocap,
-                "last_avg_loss": ep_loss,
-                "pad_id": self.model.pad_id, 
-                "bos_id": self.model.bos_id, 
-                "eos_id": self.model.eos_id,
                 "imgsz": self.model.imgsz,
-                "LSTM_num_layers": self.model.num_layers,
-                "LSTM_hidden_feats": self.model.hidden_feats,
-                "decoder_embed_dim": self.model.dim
+                "dim": self.model.dim,
+                "encoder_depth": self.model.encoder_depth,
+                "decoder_depth": self.model.decoder_depth,
+                "encoder_num_heads": self.model.encoder_num_heads,
+                "decoder_num_heads": self.model.decoder_num_heads,
+                "dropout": self.model.dropout,
+                "freeze_backbone": self.model.freeze_backbone,
+                "last_avg_loss": ep_loss
             }
 
             last_path = os.path.join(cfg.save_dir, "last.pt")

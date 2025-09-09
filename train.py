@@ -22,20 +22,25 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 tokenizer = Tokenizer(captions)
 
 # To Load From Checkpoint
-model = Model.load_from_checkpoint(
-    path="train_outs/last.pt", 
-    tokenizer=tokenizer,
-    freeze_backbone=True,
-    device=device)
+# model = Model.load_from_checkpoint(
+#     path="train_outs/last.pt", 
+#     tokenizer=tokenizer,
+#     freeze_backbone=True,
+#     device=device)
 
-#model = Model(
-#    tokenizer=tokenizer,
-#    model=YOLO("yolo11n.pt"),
-#    imgsz=480,
-#    dim=128,
-#    hidden_feats=128,
-#    device=device
-#)
+model = Model(
+    tokenizer=tokenizer,
+    model=YOLO("yolo11n.pt"),
+    imgsz=480,
+    dim=256,
+    encoder_depth=3,
+    decoder_depth=3,
+    encoder_num_heads=8,
+    decoder_num_heads=8,
+    dropout=0.1,
+    freeze_backbone=True,
+    device=device
+)
 
 model.train(
     imagepaths=img_paths,
