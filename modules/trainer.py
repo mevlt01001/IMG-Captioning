@@ -236,8 +236,6 @@ class Trainer:
                 "decoder_depth": self.model.decoder_depth,
                 "encoder_num_heads": self.model.encoder_num_heads,
                 "decoder_num_heads": self.model.decoder_num_heads,
-                "dropout": self.model.dropout,
-                "freeze_backbone": self.model.freeze_backbone,
                 "last_avg_loss": ep_loss
             }
 
