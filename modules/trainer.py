@@ -36,10 +36,12 @@ def load_images(paths, imgsz, device=torch.device('cpu')):
 
     return torch.cat([_load_img(p, imgsz) for p in paths], dim=0).to(device=device)
 
-def load_captions(captions:list[list[int]], vocap_size:int, device=torch.device('cpu')):
+def load_captions(captions:list[list[int]], max_len, device=torch.device('cpu')):
     tin = []
     tout = []
     for cap in captions:
+        stop = min(len(cap), max_len)
+        cap = cap[:stop]
         tin.append(cap[:-1])
         tout.append(cap[1:])
     
@@ -68,8 +70,8 @@ def save_pred(img: torch.Tensor, caption: str, save_path: str = "pred.png"):
 
     panel_pil = Image.new("RGB", (imgsz, imgsz), (0,0,0))
     draw = ImageDraw.Draw(panel_pil)
-    font = ImageFont.load_default(size=24)
-    wrapped = textwrap.fill(caption, width=24)
+    font = ImageFont.load_default(size=26)
+    wrapped = textwrap.fill(caption, width=38)
 
     x0, y0 = 24, 24
     bbox = draw.multiline_textbbox((x0, y0), wrapped, font=font, spacing=6)
@@ -92,8 +94,21 @@ class TrainConfig:
     lr:float = 2e-4
     weight_decay:float = 1e-2
     grad_clip:float = 1.0
-    num_workers:int = 4
     save_dir:str = "checkpoints"
+    max_len:int = 128
+    seq_len:int = 128
+
+    def __str__(self):
+        f"""
+        epoch: {self.epoch}
+        batch_size: {self.batch_size}
+        lr: {self.lr}
+        weight_decay: {self.weight_decay}
+        grad_clip: {self.grad_clip}
+        save_dir: {self.save_dir}
+        Training max sentece length: {self.max_len}
+        Tokenizer max sentece length: {self.seq_len}
+        """
 
 
 class Trainer:
@@ -126,6 +141,7 @@ class Trainer:
             weight_decay:float=1e-2,
             grad_clip:float=1.0,
             save_dir:str="checkpoints",
+            max_len = 128
             ):
         
         self.cfg = TrainConfig(epoch=epoch,
@@ -133,8 +149,11 @@ class Trainer:
                           lr=lr,
                           weight_decay=weight_decay,
                           grad_clip=grad_clip,
-                          save_dir=save_dir)
+                          save_dir=save_dir,
+                          max_len=max_len,
+                          seq_len=tokenizer.seq_len)
         cfg = self.cfg
+        print(cfg)
         
         os.makedirs(cfg.save_dir, exist_ok=True)
 
@@ -167,10 +186,10 @@ class Trainer:
                 captions = self.captions[batch_start_idx:batch_start_idx+batch_size]
 
                 imgs = load_images(paths, imgsz=self.model.imgsz, device=self.device)
-                tins, touts = load_captions(captions, self.model.vocap_size, device=self.device) # 2x [B, T, V]
+                tins, touts = load_captions(captions, max_len, device=self.device) # 2x [B, T, V]
                 pad_id = self.model.pad_id
                 valid_lens = (touts != pad_id).sum(dim=1)              # [B]
-                batch_max_len = int(valid_lens.max().item())
+                batch_max_len = min(tokenizer.seq_len, int(valid_lens.max().item()))
                 tins  = tins[:,  :batch_max_len]
                 touts = touts[:, :batch_max_len]
                 with autocast(device_type="cuda", dtype=torch.float16):
@@ -180,9 +199,13 @@ class Trainer:
                 opt.zero_grad()
                 scaler.scale(loss).backward()
                 nn.utils.clip_grad_norm_(self.model.parameters(), cfg.grad_clip)
+                old_scale = scaler.get_scale()
                 scaler.step(opt)
                 scaler.update()
-                sched.step()
+                stepped = scaler.get_scale() >= old_scale
+
+                if stepped:
+                    sched.step()
 
                 bsz = imgs.size(0)
                 global_loss += loss.item() * bsz

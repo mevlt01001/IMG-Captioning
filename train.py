@@ -44,12 +44,13 @@ model = Model(
 
 model.train(
     imagepaths=img_paths,
-    epoch=125, 
-    batch_size=4,
+    epoch=75, 
+    batch_size=64,
     lr=1e-4,
     weight_decay=1e-2,
     grad_clip=1.0,
     save_dir="train_outs",
+    max_len = 75
 )
 
 
