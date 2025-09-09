@@ -3,7 +3,7 @@ import math
 class Tokenizer:
     def __init__(self, captions:list[str]):
         self.captions: list[str] = captions
-        self.min_freq = 5
+        self.min_freq = 2
         self.BOS = "<BOS>"
         self.EOS = "<EOS>"
         self.PAD = "<PAD>"

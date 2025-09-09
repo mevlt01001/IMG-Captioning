@@ -34,8 +34,6 @@ class Model(torch.nn.Module):
         self.decoder_depth = decoder_depth
         self.encoder_num_heads = encoder_num_heads
         self.decoder_num_heads = decoder_num_heads
-        self.dropout = dropout
-        self.freeze_backbone = freeze_backbone
         self.device = device
 
         self.backbone = Backbone(model=model, 
@@ -84,19 +82,18 @@ class Model(torch.nn.Module):
                              path:str, 
                              tokenizer:Tokenizer,
                              freeze_backbone:bool=False,
+                             dropout:float=0.1,
                              device=torch.device('cpu')):
         from ultralytics import YOLO
         
         ckpt = torch.load(path, map_location=device)
         sd = ckpt.get("model_state_dict", None)
         imgsz = ckpt.get("imgsz",640)
-        dim = ckpt.get("decoder_embed_dim", 512)
+        dim = ckpt.get("dim", 512)
         encoder_depth = ckpt.get("encoder_depth", 3)
         decoder_depth = ckpt.get("decoder_depth", 3)
         encoder_num_heads = ckpt.get("encoder_num_heads", 8)
         decoder_num_heads = ckpt.get("decoder_num_heads", 8)
-        dropout = ckpt.get("dropout", 0.1)
-        freeze_backbone = ckpt.get("freeze_backbone", False)
         vocab = ckpt.get("vocab", None)
         model_name = ckpt.get("model_name", "yolo11n.pt")
         yolo_model = YOLO(model_name)
