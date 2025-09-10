@@ -74,7 +74,7 @@ class Model(torch.nn.Module):
     def forward(self, x, tokens_in=None):
         x = self.backbone(x)
         x = self.encoder(x)
-        x = self.decoder.forward(x, tokens_in) if self.training else self.decoder.generate(x, max_len=self.tokenizer.seq_len)
+        x = self.decoder.forward(x, tokens_in) if self.training else self.decoder.generate(x, max_len=self.tokenizer.max_seq_len)
         return x
     
     @classmethod

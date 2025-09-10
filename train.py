@@ -23,7 +23,7 @@ tokenizer = Tokenizer(captions)
 
 # To Load From Checkpoint
 # model = Model.load_from_checkpoint(
-#     path="train_outs/last.pt", 
+#     path="train_outs/best.pt", 
 #     tokenizer=tokenizer,
 #     freeze_backbone=True,
 #     device=device)
@@ -31,8 +31,8 @@ tokenizer = Tokenizer(captions)
 model = Model(
     tokenizer=tokenizer,
     model=YOLO("yolo11n.pt"),
-    imgsz=480,
-    dim=344,
+    imgsz=640,
+    dim=512,
     encoder_depth=3,
     decoder_depth=3,
     encoder_num_heads=8,
@@ -44,13 +44,13 @@ model = Model(
 
 model.train(
     imagepaths=img_paths,
-    epoch=75, 
-    batch_size=64,
-    lr=1e-4,
+    epoch=100, 
+    batch_size=32,
+    lr=75e-4,
     weight_decay=1e-2,
     grad_clip=1.0,
     save_dir="train_outs",
-    max_len = 75
+    max_len = None
 )
 
 

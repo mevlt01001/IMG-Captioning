@@ -40,8 +40,7 @@ def load_captions(captions:list[list[int]], max_len, device=torch.device('cpu'))
     tin = []
     tout = []
     for cap in captions:
-        stop = min(len(cap), max_len)
-        cap = cap[:stop]
+        cap = cap[:max_len]
         tin.append(cap[:-1])
         tout.append(cap[1:])
     
@@ -95,8 +94,12 @@ class TrainConfig:
     weight_decay:float = 1e-2
     grad_clip:float = 1.0
     save_dir:str = "checkpoints"
-    max_len:int = 128
-    seq_len:int = 128
+    sentence_lim:int = 128
+    max_seq_len:int = 128
+    min_seq_len:int = 1
+    avg_seq_len:int = 0
+    std_seq_len:int = 0
+    recommended_seq_len:int = 0
 
     def __str__(self):
         return f"""
@@ -106,8 +109,12 @@ class TrainConfig:
         weight_decay: {self.weight_decay}
         grad_clip: {self.grad_clip}
         save_dir: {self.save_dir}
-        Training max sentece length: {self.max_len}
-        Tokenizer max sentece length: {self.seq_len}
+        min sentece length: {self.max_seq_len}
+        max sentece length: {self.max_seq_len}
+        avg sentece length: {self.avg_seq_len:.2f}
+        std sentece length: {self.std_seq_len:.2f}
+        recommended sentece length: {self.recommended_seq_len}
+        Training sentece limit: {self.sentence_lim}
         """
 
 
@@ -141,17 +148,21 @@ class Trainer:
             weight_decay:float=1e-2,
             grad_clip:float=1.0,
             save_dir:str="checkpoints",
-            max_len = 128
+            max_len = None
             ):
-        
+        len_limit = max_len if max_len is not None else tokenizer.recommended_seq_len
         self.cfg = TrainConfig(epoch=epoch,
                           batch_size=batch_size,
                           lr=lr,
                           weight_decay=weight_decay,
                           grad_clip=grad_clip,
                           save_dir=save_dir,
-                          max_len=max_len,
-                          seq_len=tokenizer.seq_len)
+                          sentence_lim=len_limit,
+                          max_seq_len=tokenizer.max_seq_len,
+                          min_seq_len=tokenizer.min_seq_len,
+                          avg_seq_len=tokenizer.avg_len,
+                          std_seq_len=tokenizer.leng_std,
+                          recommended_seq_len=tokenizer.recommended_seq_len)
         cfg = self.cfg
         print(cfg)
         
@@ -186,12 +197,8 @@ class Trainer:
                 captions = self.captions[batch_start_idx:batch_start_idx+batch_size]
 
                 imgs = load_images(paths, imgsz=self.model.imgsz, device=self.device)
-                tins, touts = load_captions(captions, max_len, device=self.device) # 2x [B, T, V]
-                pad_id = self.model.pad_id
-                valid_lens = (touts != pad_id).sum(dim=1)              # [B]
-                batch_max_len = min(tokenizer.seq_len, int(valid_lens.max().item()))
-                tins  = tins[:,  :batch_max_len]
-                touts = touts[:, :batch_max_len]
+                tins, touts = load_captions(captions, len_limit, device=self.device) # 2x [B, T, V]
+
                 with autocast(device_type="cuda", dtype=torch.float16):
                     logits = self.model.forward(imgs, tins)
                     loss = criterion.forward(logits.reshape(-1, logits.size(-1)), touts.reshape(-1))

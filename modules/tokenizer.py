@@ -1,4 +1,6 @@
 import math 
+import numpy as np
+import pandas as pd
 
 class Tokenizer:
     def __init__(self, captions:list[str]):
@@ -49,8 +51,14 @@ class Tokenizer:
         self.vocap = list(set(sepical_tokens+[word for cap in self.captions for word in cap]))
         self.vocap_size = len(self.vocap)
         
-        self.seq_len = max(len(cap) for cap in self.captions)
-        self.captions = [cap + [self.PAD] * (self.seq_len - len(cap)) for cap in self.captions]
+        seqs = np.array([len(cap) for cap in self.captions])
+        self.max_seq_len = np.max(seqs)
+        self.min_seq_len = np.min(seqs)
+        self.avg_len = np.mean(seqs)
+        self.leng_std = np.std(seqs)
+        self.recommended_seq_len = math.ceil(self.avg_len + 2.5 * self.leng_std)
+
+        self.captions = [cap + [self.PAD] * (self.max_seq_len - len(cap)) for cap in self.captions]
         
         self.char2idx = {t:i for i,t in enumerate(self.vocap)}
         self.idx2char = {i:t for t,i in self.char2idx.items()}
