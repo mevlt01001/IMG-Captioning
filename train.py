@@ -11,7 +11,7 @@ from datasets import load_dataset
 # CAPTIONS_PATH = "/home/neuron/datasets/obss-intern-competition-2025/train.csv"
 # IMAGES_PATH   = "/home/neuron/datasets/obss-intern-competition-2025/train_images/"
 
-ds = load_dataset("ituperceptron/image-captioning-turkish", split="short_captions")
+ds = load_dataset("ituperceptron/image-captioning-turkish", split="long_captions")
 
 # labels    = pd.read_csv(CAPTIONS_PATH)
 captions  = ds["text"]
@@ -33,10 +33,10 @@ model = Model(
     model=YOLO("yolo11n.pt"),
     imgsz=640,
     dim=512,
-    encoder_depth=3,
-    decoder_depth=3,
-    encoder_num_heads=8,
-    decoder_num_heads=8,
+    encoder_depth=5,
+    decoder_depth=5,
+    encoder_num_heads=4,
+    decoder_num_heads=4,
     dropout=0.1,
     freeze_backbone=True,
     device=device
@@ -45,8 +45,8 @@ model = Model(
 model.train(
     imagepaths=img_paths,
     epoch=100, 
-    batch_size=32,
-    lr=75e-4,
+    batch_size=64,
+    lr=1e-3,
     weight_decay=1e-2,
     grad_clip=1.0,
     save_dir="train_outs",

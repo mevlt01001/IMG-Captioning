@@ -109,7 +109,7 @@ class TrainConfig:
         weight_decay: {self.weight_decay}
         grad_clip: {self.grad_clip}
         save_dir: {self.save_dir}
-        min sentece length: {self.max_seq_len}
+        min sentece length: {self.min_seq_len}
         max sentece length: {self.max_seq_len}
         avg sentece length: {self.avg_seq_len:.2f}
         std sentece length: {self.std_seq_len:.2f}
