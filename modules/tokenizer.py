@@ -56,7 +56,7 @@ class Tokenizer:
         self.min_seq_len = np.min(seqs)
         self.avg_len = np.mean(seqs)
         self.leng_std = np.std(seqs)
-        self.recommended_seq_len = math.ceil(self.avg_len + 2.5 * self.leng_std)
+        self.recommended_seq_len = math.ceil(self.avg_len + 2 * self.leng_std)*2
 
         self.captions = [cap + [self.PAD] * (self.max_seq_len - len(cap)) for cap in self.captions]
         
