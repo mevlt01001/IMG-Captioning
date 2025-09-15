@@ -11,7 +11,7 @@ from datasets import load_dataset
 # CAPTIONS_PATH = "/home/neuron/datasets/obss-intern-competition-2025/train.csv"
 # IMAGES_PATH   = "/home/neuron/datasets/obss-intern-competition-2025/train_images/"
 
-ds = load_dataset("ituperceptron/image-captioning-turkish", split="long_captions")
+ds = load_dataset("ituperceptron/image-captioning-turkish", split="short_captions")
 
 # labels    = pd.read_csv(CAPTIONS_PATH)
 captions  = ds["text"]
@@ -23,29 +23,31 @@ tokenizer = Tokenizer(captions)
 
 # To Load From Checkpoint
 # model = Model.load_from_checkpoint(
-#     path="train_outs/best.pt", 
+#     path="train_outs/last.pt", 
 #     tokenizer=tokenizer,
 #     freeze_backbone=True,
 #     device=device)
 
 model = Model(
     tokenizer=tokenizer,
-    model=YOLO("yolo11n.pt"),
-    imgsz=640,
-    dim=512,
-    encoder_depth=5,
-    decoder_depth=5,
-    encoder_num_heads=4,
-    decoder_num_heads=4,
+    model=None,
+    imgsz=224,
+    dim=64,
+    encoder_depth=2,
+    decoder_depth=2,
+    encoder_num_heads=2,
+    decoder_num_heads=2,
     dropout=0.1,
-    freeze_backbone=True,
-    device=device
+    freeze_backbone=False,
+    device=device,
+    use_raw_patches=True,
+    patch_size=32
 )
 
 model.train(
     imagepaths=img_paths,
-    epoch=100, 
-    batch_size=64,
+    epoch=50, 
+    batch_size=16,
     lr=1e-3,
     weight_decay=1e-2,
     grad_clip=1.0,
@@ -55,7 +57,7 @@ model.train(
 
 
 # To Predict
-# img = np.array(Image.open("images.jpeg").convert("RGB").resize((model.imgsz, model.imgsz)))
+# img = np.array(Image.open("ist.jpeg").convert("RGB").resize((model.imgsz, model.imgsz)))
 # img = torch.from_numpy(img).permute(2,0,1).unsqueeze(0).float() / 255.0
 # model.predict(img.to(device))
 

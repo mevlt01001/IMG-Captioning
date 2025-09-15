@@ -1,7 +1,7 @@
 import os
 import torch
 from . import UltralyticsModel
-from .backbone import Backbone
+from .backbone import Backbone, PatchEmbedder
 from .encoder import ViTEncoder
 from .decoder import ViTDecoder
 from .tokenizer import Tokenizer
@@ -9,20 +9,23 @@ from .trainer import Trainer, save_pred
 
 class Model(torch.nn.Module):
     def __init__(self,
-                 tokenizer:Tokenizer,
-                 model:UltralyticsModel|None=None,
-                 imgsz:int=640,
-                 dim:int=512,
-                 encoder_depth:int=3,
-                 decoder_depth:int=3,
-                 encoder_num_heads:int=8,
-                 decoder_num_heads:int=8,
-                 dropout:float=0.1,
-                 freeze_backbone:bool=True,
-                 device:torch.device=torch.device('cpu'),
-                 ):
+                tokenizer,
+                model=None,
+                imgsz=640,
+                dim=512,
+                encoder_depth=3,
+                decoder_depth=3,
+                encoder_num_heads=8,
+                decoder_num_heads=8,
+                dropout=0.1,
+                freeze_backbone=True,
+                device=torch.device('cpu'),
+                use_raw_patches: bool = False, # if True, use raw patches not included backbone.
+                patch_size: int = 16 # if use_raw_patches is True
+                ):
         super().__init__()
 
+        self.model_name = model.model_name if model is not None else None
         self.tokenizer = tokenizer
         self.vocap_size = tokenizer.vocap_size
         self.imgsz = max(64, 32 * (imgsz // 32))
@@ -36,9 +39,15 @@ class Model(torch.nn.Module):
         self.decoder_num_heads = decoder_num_heads
         self.device = device
 
-        self.backbone = Backbone(model=model, 
-                                 imgsz=self.imgsz, 
-                                 device=self.device)  # p3/p4/p5 inf
+        if use_raw_patches:
+            self.backbone = PatchEmbedder(imgsz=self.imgsz,
+                                          out_dim=self.dim,
+                                          patch_size=patch_size,
+                                          device=self.device)
+        else:
+            self.backbone = Backbone(model=model,
+                                    imgsz=self.imgsz,
+                                    device=self.device)
         
         self.encoder  = ViTEncoder(dim=self.dim, 
                                    in_shape=self.backbone.bb_out_shape,

@@ -37,6 +37,9 @@ def load_images(paths, imgsz, device=torch.device('cpu')):
     return torch.cat([_load_img(p, imgsz) for p in paths], dim=0).to(device=device)
 
 def load_captions(captions:list[list[int]], max_len, device=torch.device('cpu')):
+    """
+    Used to apply teacher forcing for training
+    """
     tin = []
     tout = []
     for cap in captions:
@@ -53,10 +56,16 @@ def remove_accents(text: str) -> str:
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
 
 def turkish_ascii(text: str) -> str:
+    """
+    Used to prediction captions visualization in Turkish sentences.
+    """
     text = remove_accents(text)
     return text.replace("ı","i").replace("İ","I")
 
 def save_pred(img: torch.Tensor, caption: str, save_path: str = "pred.png"):
+    """
+    This function is used to save image and caption for validation.
+    """
     if img.ndim != 3 or img.shape[0] not in (1,3):
         raise ValueError(f"img shape must be [C,H,W] with C=1 or 3, got {tuple(img.shape)}")
 
@@ -234,7 +243,7 @@ class Trainer:
             print(f"[EPOCH {ep:03d}] loss={ep_loss:.4f}  time={dt:.1f}s")
 
             ckpt = {
-                "model_name": self.model.backbone.model_name,
+                "model_name": self.model.model_name if self.model is not None else "ViT Transformer",
                 "model_state_dict": self.model.state_dict(),
                 "vocab": tokenizer.vocap,
                 "imgsz": self.model.imgsz,

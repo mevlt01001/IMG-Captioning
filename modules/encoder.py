@@ -92,6 +92,7 @@ class ViTEncoder(torch.nn.Module):
 
         return self.norm(x)         # [B,S,D]
 
+# ------ OLD VERSION ------
 class CNNEncoder(nn.Module):
 
     def __init__(self,

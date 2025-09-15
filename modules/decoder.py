@@ -62,18 +62,18 @@ class DecoderAttnBlock(nn.Module):
                 enc_key_padding=None):
         
         # x: [B,T,D], enc_out: [B,S,D]
-        h = self.norm1(x)
+        h = self.norm1.forward(x)
         x = x + self.self_attn.forward(h, h, h,
-                               attn_mask=self_attn_mask,            # [T,T] causal
+                               attn_mask=self_attn_mask,            # [T,T] mask
                                key_padding_mask=self_key_padding,   # [B,T]
                                need_weights=False)[0]
 
-        h = self.norm2(x)
-        x = x + self.cross_attn(h, enc_out, enc_out,
-                                key_padding_mask=enc_key_padding,   # [B,S] (genelde None)
+        h = self.norm2.forward(x)
+        x = x + self.cross_attn.forward(h, enc_out, enc_out,
+                                key_padding_mask=enc_key_padding,   # [B,S]
                                 need_weights=False)[0]
-        h = self.norm3(x)
-        x = x + self.mlp(h)
+        h = self.norm3.forward(x)
+        x = x + self.mlp.forward(h)
         return x  # [B,T,D]
     
 class ViTDecoder(nn.Module):
@@ -97,7 +97,7 @@ class ViTDecoder(nn.Module):
         self.blocks = nn.ModuleList([DecoderAttnBlock(dim, heads, dropout) for _ in range(depth)]).to(device)
         self.norm = nn.LayerNorm(dim).to(device)
         self.lm_head = nn.Linear(dim, vocab_size, bias=False).to(device)
-        self.lm_head.weight = self.embed.weight
+        # self.lm_head.weight = self.embed.weight
 
     def forward(self, 
                 enc_out:torch.Tensor, # [B,S,D]
@@ -108,9 +108,9 @@ class ViTDecoder(nn.Module):
         x = x + sinusoidal_1d_pe(T, x.size(-1), x.device)  # 1D PE
         x = self.dropout.forward(x)
 
-        attn_mask = causal_mask(T, x.device)               # [T,T], True=mask
+        attn_mask = causal_mask(T, x.device)               # [T,T]
         key_pad   = (tins == self.pad_id)                  # [B,T]
-        enc_key_pad = None                                 # genelde gerekmez (S patch’lerin hepsi geçerli)
+        enc_key_pad = None                                 
 
         for blk in self.blocks:
             x = blk.forward(x, enc_out, self_attn_mask=attn_mask, self_key_padding=key_pad, enc_key_padding=enc_key_pad)
@@ -138,7 +138,7 @@ class ViTDecoder(nn.Module):
 
             x = self.norm(x)
             logits = self.lm_head(x[:, -1])                        # [B,vocab]
-            next_id = torch.argmax(logits, dim=-1)                 # greedy (istersen top-k/nucleus ekleriz)
+            next_id = torch.argmax(logits, dim=-1)                 # greedy
             x_ids = torch.cat([x_ids, next_id[:,None]], dim=1)
 
             finished = finished | (next_id == self.eos_id)
@@ -147,6 +147,7 @@ class ViTDecoder(nn.Module):
 
         return x_ids  # [B, <=max_len+1]
 
+# ------ OLD VERSION ------
 class AdditiveAttn(nn.Module):
     def __init__(self, fdim=512, hdim=512, dim=128):
         super().__init__()
@@ -164,8 +165,8 @@ class AdditiveAttn(nn.Module):
         return self.linear_image(image_features)
 
     def forward_cached(self,
-                       proj_image: torch.Tensor,      # [B, S, A] -> precomputed
-                       image_features: torch.Tensor,  # [B, S, D_img] -> bmm için
+                       proj_image: torch.Tensor,      # [B, S, A] precomputed
+                       image_features: torch.Tensor,  # [B, S, D_img] bmm
                        hidden_state: torch.Tensor     # [B, H]
                        ) -> tuple[torch.Tensor, torch.Tensor]:
         
