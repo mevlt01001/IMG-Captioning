@@ -75,14 +75,15 @@ class Tokenizer:
         self.vocap = vocap
         self.char2idx = {t:i for i,t in enumerate(self.vocap)}
         self.idx2char = {i:t for t,i in self.char2idx.items()}
+        self.vocap_size = len(self.char2idx)
         
-        captions = []
-        for cap in self.captions:
-            sentence = []
-            for w in cap:
-                sentence.append(self.char2idx[w])
-            captions.append(sentence)
-        self.tokenized_captions = captions
+        # captions = []
+        # for cap in self.captions:
+        #     sentence = []
+        #     for w in cap:
+        #         sentence.append(self.char2idx[w])
+        #     captions.append(sentence)
+        # self.tokenized_captions = captions
         return self
 
     def encode(self, text:str) -> list[int]:

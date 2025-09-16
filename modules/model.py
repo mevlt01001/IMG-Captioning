@@ -1,5 +1,7 @@
 import os
 import torch
+import numpy as np
+from PIL import Image
 from . import UltralyticsModel
 from .backbone import Backbone, PatchEmbedder
 from .encoder import ViTEncoder
@@ -68,17 +70,25 @@ class Model(torch.nn.Module):
         if freeze_backbone:
             for p in self.backbone.parameters():
                 p.requires_grad = False
+    
+    def _preprocess(self, image_path:os.PathLike):
+        im = Image.open(image_path).convert("RGB").resize((self.imgsz, self.imgsz))
+        im = np.array(im)
+        im = torch.from_numpy(im).permute(2,0,1).unsqueeze(0).float() / 255.0
+        return im
 
     @torch.no_grad()
-    def predict(self, images:torch.Tensor):
+    def predict(self, image:torch.Tensor|os.PathLike):
+        if isinstance(image,str):
+            image = self._preprocess(image).to(self.device)
         self.eval()
-        assert images.ndim == 4, "x must be [B,C,H,W]"
-        pred = self.forward(images)
+        assert image.ndim == 4, "x must be [B,C,H,W]"
+        pred = self.forward(image)
         B = pred.size(0)
         for i in range(B):
             cap = self.tokenizer.decode(pred[i].tolist())
             os.makedirs(f"Inference_outs/preds", exist_ok=True)
-            save_pred(images[i], cap, os.path.join(f"Inference_outs/preds", f"{i}.png"))
+            save_pred(image[i], cap, os.path.join(f"Inference_outs/preds", f"{i}.png"))
 
     def forward(self, x, tokens_in=None):
         x = self.backbone(x)
