@@ -63,3 +63,4 @@ model = Model.load_from_checkpoint(
 model.predict("dog_bike_car.jpg")
 ```
 
+#### **To Some Predictions [check out](assets).**
